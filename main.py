@@ -3,7 +3,9 @@ import logging
 import shutil
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from webdav3.client import Client
-from static_ffmpeg import get_static_ffmpeg_path, get_static_ffprobe_path # Import specific functions
+import sys
+import glob
+from static_ffmpeg import add_paths # Keep this import, but we'll use its return value directly
 import yt_dlp
 from dotenv import load_dotenv
 
@@ -13,31 +15,25 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Lade .env Variablen
 load_dotenv()
 
-# Initialisiere ffmpeg/ffprobe
+# Initialisiere ffmpeg/ffprobe mit Fallback
+# Global variable to store the found ffmpeg executable path
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
 
 try:
-    logging.info("Versuche FFmpeg/FFprobe Pfade über static_ffmpeg zu erhalten...")
-    
-    _temp_ffmpeg_path = get_static_ffmpeg_path()
-    _temp_ffprobe_path = get_static_ffprobe_path()
+    # static_ffmpeg.add_paths() returns the directory where it placed binaries
+    ffmpeg_bin_dir = add_paths() 
 
-    logging.info(f"static_ffmpeg.get_static_ffmpeg_path() Rückgabe: {_temp_ffmpeg_path} (Typ: {type(_temp_ffmpeg_path)})")
-    logging.info(f"static_ffmpeg.get_static_ffprobe_path() Rückgabe: {_temp_ffprobe_path} (Typ: {type(_temp_ffprobe_path)})")
+    # Construct the full, absolute path to the ffmpeg and ffprobe executables
+    # This is the crucial change for yt-dlp's ffmpeg_location
+    FFMPEG_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
+    FFPROBE_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffprobe')
 
-    # Check if static_ffmpeg successfully provided paths
-    if _temp_ffmpeg_path and isinstance(_temp_ffmpeg_path, str) and \
-       os.path.exists(_temp_ffmpeg_path) and os.path.isfile(_temp_ffmpeg_path) and \
-       os.access(_temp_ffmpeg_path, os.X_OK):
-        
-        FFMPEG_EXECUTABLE_PATH = _temp_ffmpeg_path
-        FFPROBE_EXECUTABLE_PATH = _temp_ffprobe_path # Assume ffprobe is also good if ffmpeg is
-
-        logging.info(f"FFmpeg ausführbarer Pfad erfolgreich von static_ffmpeg gefunden: {FFMPEG_EXECUTABLE_PATH}")
+    # Verify if the files exist and are executable (optional, but good for debugging startup)
+    if os.path.exists(FFMPEG_EXECUTABLE_PATH) and os.path.isfile(FFMPEG_EXECUTABLE_PATH) and os.access(FFMPEG_EXECUTABLE_PATH, os.X_OK):
+        logging.info(f"FFmpeg ausführbarer Pfad erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
     else:
-        logging.warning("static_ffmpeg konnte keinen gültigen, ausführbaren FFmpeg-Pfad bereitstellen. Versuche System-FFmpeg.")
-        # Fallback to system-wide ffmpeg if static_ffmpeg didn't provide a valid path
+        # Fallback to system-wide ffmpeg if static_ffmpeg path isn't valid/executable
         ffmpeg_bin_sys = shutil.which("ffmpeg")
         ffprobe_bin_sys = shutil.which("ffprobe")
         if ffmpeg_bin_sys and ffprobe_bin_sys:
@@ -45,18 +41,15 @@ try:
             FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
             logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
         else:
-            raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit). App kann nicht starten.")
+            raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
 except Exception as e:
-    logging.critical(f"Kritischer Fehler bei FFmpeg/FFprobe Initialisierung. App kann nicht starten: {e}", exc_info=True)
-    # Ensure app doesn't proceed if this critical dependency isn't met
-    # sys.exit(1) # This would cleanly exit, but Coolify might just report "Service Unavailable"
-    FFMPEG_EXECUTABLE_PATH = None # Set to None, but the app likely won't even reach run()
-    # It might be better to just let the exception propagate if it's truly critical
-    raise # Re-raise the exception to clearly show startup failure in logs
+    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}")
+    FFMPEG_EXECUTABLE_PATH = None
+    FFPROBE_EXECUTABLE_PATH = None
 
 
-# Flask Setup (rest of your code remains the same)
+# Flask Setup
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "changeme")
 
