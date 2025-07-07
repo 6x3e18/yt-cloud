@@ -5,7 +5,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from webdav3.client import Client
 import sys
 import glob
-from static_ffmpeg import add_paths
+from static_ffmpeg import add_paths # Keep this import, but we'll use its return value directly
 import yt_dlp
 from dotenv import load_dotenv
 
@@ -16,36 +16,37 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 load_dotenv()
 
 # Initialisiere ffmpeg/ffprobe mit Fallback
-ffmpeg_path = None
+# Global variable to store the found ffmpeg executable path
+FFMPEG_EXECUTABLE_PATH = None
+FFPROBE_EXECUTABLE_PATH = None
 
 try:
-    add_paths()
+    # static_ffmpeg.add_paths() returns the directory where it placed binaries
+    ffmpeg_bin_dir = add_paths() 
 
-    # Mögliche statische Folder finden
-    venv_site = os.path.dirname(sys.modules['static_ffmpeg'].__file__)
-    pattern = os.path.join(venv_site, 'bin', '*')
-    candidates = glob.glob(pattern)
+    # Construct the full, absolute path to the ffmpeg and ffprobe executables
+    # This is the crucial change for yt-dlp's ffmpeg_location
+    FFMPEG_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
+    FFPROBE_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffprobe')
 
-    # Filtere ffmpeg / ffprobe Dateien
-    bins = [p for p in candidates if os.path.basename(p) in ('ffmpeg', 'ffprobe') or os.path.basename(p).startswith('ffmpeg')]
-
-    if bins:
-        ffmpeg_dir = os.path.dirname(bins[0])
-        ffmpeg_path = ffmpeg_dir
-        logging.info(f"Verwende FFmpeg aus static_ffmpeg im Verzeichnis: {ffmpeg_path}")
+    # Verify if the files exist and are executable (optional, but good for debugging startup)
+    if os.path.exists(FFMPEG_EXECUTABLE_PATH) and os.path.isfile(FFMPEG_EXECUTABLE_PATH) and os.access(FFMPEG_EXECUTABLE_PATH, os.X_OK):
+        logging.info(f"FFmpeg ausführbarer Pfad erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
     else:
-        # Fallback auf Systemffmpeg
-        ffmpeg_bin = shutil.which("ffmpeg")
-        ffprobe_bin = shutil.which("ffprobe")
-        if ffmpeg_bin and ffprobe_bin:
-            ffmpeg_path = os.path.dirname(ffmpeg_bin)
-            logging.info(f"Verwende systemweiten FFmpeg: {ffmpeg_bin}")
+        # Fallback to system-wide ffmpeg if static_ffmpeg path isn't valid/executable
+        ffmpeg_bin_sys = shutil.which("ffmpeg")
+        ffprobe_bin_sys = shutil.which("ffprobe")
+        if ffmpeg_bin_sys and ffprobe_bin_sys:
+            FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
+            FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
+            logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
         else:
             raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
 except Exception as e:
     logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}")
-    ffmpeg_path = None
+    FFMPEG_EXECUTABLE_PATH = None
+    FFPROBE_EXECUTABLE_PATH = None
 
 
 # Flask Setup
@@ -75,7 +76,8 @@ def index():
             flash("Bitte gib eine URL ein.", "error")
             return render_template("index.html")
             
-        if not ffmpeg_path:
+        # Use the globally determined ffmpeg path
+        if not FFMPEG_EXECUTABLE_PATH: 
             flash("❌ Fehler: FFmpeg ist nicht verfügbar. Bitte kontaktiere den Administrator.", "error")
             return render_template("index.html")
 
@@ -119,17 +121,20 @@ def logout():
     session.pop("logged_in", None)
     flash("Du wurdest ausgeloggt.", "info")
     return redirect(url_for("login"))
+
 def download_audio(url):
     download_dir = "/tmp/downloads"
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Starte Audio-Download für URL: {url}")
-    logging.info(f"Using FFmpeg path for yt-dlp: {ffmpeg_path}")
+    # Use the global FFMPEG_EXECUTABLE_PATH here
+    logging.info(f"Using FFmpeg executable path for yt-dlp: {FFMPEG_EXECUTABLE_PATH}") 
 
     # yt-dlp wird das Format basierend auf 'preferredcodec' festlegen
     # Die Dateierweiterung wird automatisch korrekt sein (z.B. .m4a)
     ydl_opts = {
         'format': 'bestaudio/best',  # Versuch 'bestaudio', fallback auf 'best'
-        'ffmpeg_location': ffmpeg_path,
+        # Pass the full executable path, not just the directory
+        'ffmpeg_location': FFMPEG_EXECUTABLE_PATH, 
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
@@ -150,15 +155,25 @@ def download_audio(url):
         info = ydl.extract_info(url, download=True)
         final_filename = ydl.prepare_filename(info)
 
-        if 'files' in info and info['files']:
-            converted_file = info['files'][0]
-            if 'filepath' in converted_file:
-                actual_filename = converted_file['filepath']
-                logging.info(f"Konvertierter Dateipfad aus info['files']: {actual_filename}")
+        # Better way to get the actual output file after post-processing
+        # yt-dlp stores the actual output files under 'requested_downloads' or directly in 'info'
+        if 'requested_downloads' in info and info['requested_downloads']:
+            actual_filename_list = [d['filepath'] for d in info['requested_downloads'] if 'filepath' in d]
+            if actual_filename_list:
+                actual_filename = actual_filename_list[0]
+                logging.info(f"Konvertierter Dateipfad aus info['requested_downloads']: {actual_filename}")
                 return actual_filename
+        
+        # Fallback for other scenarios or if 'requested_downloads' is not present/empty
+        elif 'filepath' in info: # Some versions or types might put it directly here
+             actual_filename = info['filepath']
+             logging.info(f"Konvertierter Dateipfad aus info['filepath']: {actual_filename}")
+             return actual_filename
 
+
+        # Original fallback logic, might still be needed for edge cases
         base_filename_without_ext = os.path.splitext(final_filename)[0]
-        expected_filename = f"{base_filename_without_ext}.m4a"
+        expected_filename = f"{base_filename_without_ext}.m4a" # Assuming AAC leads to .m4a
 
         if os.path.exists(expected_filename):
             logging.info(f"Erwarteter Dateipfad {expected_filename} existiert.")
@@ -183,7 +198,7 @@ def upload_to_webdav(local_path):
     client = Client(options)
     
     # Sicherstellen, dass der Zielpfad auf dem WebDAV existiert
-    remote_dir = "/Soundcloud"
+    remote_dir = "/Soundcloud" # Consider making this configurable via env var
     if not client.check(remote_dir):
         logging.info(f"Erstelle WebDAV-Verzeichnis: {remote_dir}")
         client.mkdir(remote_dir)
@@ -205,5 +220,5 @@ if __name__ == "__main__":
     os.makedirs("/tmp/downloads", exist_ok=True)
     
     # Debug-Modus ist gut für die Entwicklung, aber NICHT für die Produktion
-    # app.run(host="0.0.0.0", port=5000, debug=True)
+    # app.run(host="0.0.0.0", port=5000, debug=True) 
     app.run(host="0.0.0.0", port=5000)
