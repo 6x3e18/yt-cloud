@@ -16,13 +16,16 @@ load_dotenv()
 # Initialisiere ffmpeg/ffprobe
 try:
     add_paths()
-    ffmpeg_path = shutil.which("ffmpeg")  # Statt get_ffmpeg_path()
-    if not ffmpeg_path:
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
         raise RuntimeError("FFmpeg konnte nicht gefunden werden.")
-    logging.info(f"FFmpeg Pfad erfolgreich gefunden: {ffmpeg_path}")
+    ffmpeg_path = os.path.dirname(ffmpeg_bin)  # yt-dlp braucht den Ordner!
+    logging.info(f"FFmpeg Pfad erfolgreich gefunden: {ffmpeg_bin}")
+    logging.info(f"Verwendeter ffmpeg_location für yt-dlp: {ffmpeg_path}")
 except Exception as e:
     logging.error(f"Fehler bei der Initialisierung von FFmpeg: {e}")
     ffmpeg_path = None
+
 
 # Flask Setup
 app = Flask(__name__)
