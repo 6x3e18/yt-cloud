@@ -2,5 +2,5 @@ Flask
 yt-dlp
 python-dotenv
 requests
-webdav3
+webdavclient3
 static-ffmpeg
