@@ -101,7 +101,7 @@ def download_audio(url):
     download_dir = "/tmp/downloads"
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Starte Audio-Download für URL: {url}")
-
+logging.info(f"Using FFmpeg path for yt-dlp: {ffmpeg_path}")
     # yt-dlp wird das Format basierend auf 'preferredcodec' festlegen
     # Die Dateierweiterung wird automatisch korrekt sein (z.B. .m4a)
     ydl_opts = {
