@@ -3,8 +3,6 @@ import logging
 import shutil
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from webdav3.client import Client
-# import sys # Not needed for this revised approach
-# import glob # Not needed for this revised approach
 from static_ffmpeg import get_static_ffmpeg_path, get_static_ffprobe_path # Import specific functions
 import yt_dlp
 from dotenv import load_dotenv
@@ -15,23 +13,30 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Lade .env Variablen
 load_dotenv()
 
-# Initialisiere ffmpeg/ffprobe mit Fallback
+# Initialisiere ffmpeg/ffprobe
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
 
 try:
-    # Use static_ffmpeg's direct path retrieval functions
-    static_ffmpeg_path = get_static_ffmpeg_path()
-    static_ffprobe_path = get_static_ffprobe_path()
-
-    # static_ffmpeg.get_static_ffmpeg_path() will automatically download/extract if needed
-    # and return the full path to the executable or None if not found/error.
+    logging.info("Versuche FFmpeg/FFprobe Pfade über static_ffmpeg zu erhalten...")
     
-    if static_ffmpeg_path and os.path.exists(static_ffmpeg_path) and os.path.isfile(static_ffmpeg_path) and os.access(static_ffmpeg_path, os.X_OK):
-        FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
-        FFPROBE_EXECUTABLE_PATH = static_ffprobe_path # Assuming ffprobe path is also valid if ffmpeg is
-        logging.info(f"FFmpeg ausführbarer Pfad von static_ffmpeg: {FFMPEG_EXECUTABLE_PATH}")
+    _temp_ffmpeg_path = get_static_ffmpeg_path()
+    _temp_ffprobe_path = get_static_ffprobe_path()
+
+    logging.info(f"static_ffmpeg.get_static_ffmpeg_path() Rückgabe: {_temp_ffmpeg_path} (Typ: {type(_temp_ffmpeg_path)})")
+    logging.info(f"static_ffmpeg.get_static_ffprobe_path() Rückgabe: {_temp_ffprobe_path} (Typ: {type(_temp_ffprobe_path)})")
+
+    # Check if static_ffmpeg successfully provided paths
+    if _temp_ffmpeg_path and isinstance(_temp_ffmpeg_path, str) and \
+       os.path.exists(_temp_ffmpeg_path) and os.path.isfile(_temp_ffmpeg_path) and \
+       os.access(_temp_ffmpeg_path, os.X_OK):
+        
+        FFMPEG_EXECUTABLE_PATH = _temp_ffmpeg_path
+        FFPROBE_EXECUTABLE_PATH = _temp_ffprobe_path # Assume ffprobe is also good if ffmpeg is
+
+        logging.info(f"FFmpeg ausführbarer Pfad erfolgreich von static_ffmpeg gefunden: {FFMPEG_EXECUTABLE_PATH}")
     else:
+        logging.warning("static_ffmpeg konnte keinen gültigen, ausführbaren FFmpeg-Pfad bereitstellen. Versuche System-FFmpeg.")
         # Fallback to system-wide ffmpeg if static_ffmpeg didn't provide a valid path
         ffmpeg_bin_sys = shutil.which("ffmpeg")
         ffprobe_bin_sys = shutil.which("ffprobe")
@@ -40,12 +45,15 @@ try:
             FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
             logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
         else:
-            raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
+            raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit). App kann nicht starten.")
 
 except Exception as e:
-    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}")
-    FFMPEG_EXECUTABLE_PATH = None
-    FFPROBE_EXECUTABLE_PATH = None
+    logging.critical(f"Kritischer Fehler bei FFmpeg/FFprobe Initialisierung. App kann nicht starten: {e}", exc_info=True)
+    # Ensure app doesn't proceed if this critical dependency isn't met
+    # sys.exit(1) # This would cleanly exit, but Coolify might just report "Service Unavailable"
+    FFMPEG_EXECUTABLE_PATH = None # Set to None, but the app likely won't even reach run()
+    # It might be better to just let the exception propagate if it's truly critical
+    raise # Re-raise the exception to clearly show startup failure in logs
 
 
 # Flask Setup (rest of your code remains the same)
