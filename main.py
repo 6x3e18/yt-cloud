@@ -3,6 +3,8 @@ import logging
 import shutil
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from webdav3.client import Client
+import sys
+import glob
 from static_ffmpeg import add_paths
 import yt_dlp
 from dotenv import load_dotenv
@@ -13,29 +15,37 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Lade .env Variablen
 load_dotenv()
 
-# Initialisiere ffmpeg/ffprobe über static_ffmpeg
+# Initialisiere ffmpeg/ffprobe mit Fallback
+ffmpeg_path = None
+
 try:
-    from static_ffmpeg import add_paths
     add_paths()
 
-    # Stelle sicher, dass ffmpeg gefunden wird
-    ffmpeg_bin = shutil.which("ffmpeg")
-    ffprobe_bin = shutil.which("ffprobe")
+    # Mögliche statische Folder finden
+    venv_site = os.path.dirname(sys.modules['static_ffmpeg'].__file__)
+    pattern = os.path.join(venv_site, 'bin', '*')
+    candidates = glob.glob(pattern)
 
-    if not ffmpeg_bin or not ffprobe_bin:
-        raise RuntimeError(f"FFmpeg oder ffprobe wurde nicht gefunden. ffmpeg: {ffmpeg_bin}, ffprobe: {ffprobe_bin}")
+    # Filtere ffmpeg / ffprobe Dateien
+    bins = [p for p in candidates if os.path.basename(p) in ('ffmpeg', 'ffprobe') or os.path.basename(p).startswith('ffmpeg')]
 
-    # yt-dlp erwartet den Ordner (nicht die Datei selbst)
-    ffmpeg_path = os.path.dirname(ffmpeg_bin)
-
-    logging.info(f"FFmpeg Pfad gefunden: {ffmpeg_bin}")
-    logging.info(f"FFprobe Pfad gefunden: {ffprobe_bin}")
-    logging.info(f"ffmpeg_location für yt-dlp: {ffmpeg_path}")
+    if bins:
+        ffmpeg_dir = os.path.dirname(bins[0])
+        ffmpeg_path = ffmpeg_dir
+        logging.info(f"Verwende FFmpeg aus static_ffmpeg im Verzeichnis: {ffmpeg_path}")
+    else:
+        # Fallback auf Systemffmpeg
+        ffmpeg_bin = shutil.which("ffmpeg")
+        ffprobe_bin = shutil.which("ffprobe")
+        if ffmpeg_bin and ffprobe_bin:
+            ffmpeg_path = os.path.dirname(ffmpeg_bin)
+            logging.info(f"Verwende systemweiten FFmpeg: {ffmpeg_bin}")
+        else:
+            raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
 except Exception as e:
-    logging.error(f"Fehler bei der Initialisierung von FFmpeg/FFprobe: {e}")
+    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}")
     ffmpeg_path = None
-
 
 
 # Flask Setup
