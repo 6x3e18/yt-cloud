@@ -1,18 +1,22 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from webdav3.client import Client
-from static_ffmpeg import add_paths
-add_paths()  # stellt ffmpeg & ffprobe zur Verfügung
+from static_ffmpeg import add_paths, get_ffmpeg_path
 import yt_dlp
 from dotenv import load_dotenv
 
-
-
+# Lade .env Variablen
 load_dotenv()
 
+# Initialisiere ffmpeg/ffprobe
+add_paths()
+ffmpeg_path = get_ffmpeg_path()
+
+# Flask Setup
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "changeme")
 
+# Zugangsdaten aus .env
 USERNAME = os.getenv("APP_USERNAME", "admin")
 PASSWORD = os.getenv("APP_PASSWORD", "password")
 
@@ -26,9 +30,9 @@ def index():
         try:
             filename = download_audio(url)
             upload_to_webdav(filename)
-            return f"Download erfolgreich: {os.path.basename(filename)}"
+            return f"✅ Download erfolgreich: {os.path.basename(filename)}"
         except Exception as e:
-            return f"Fehler: {e}"
+            return f"❌ Fehler: {e}"
 
     return render_template("index.html")
 
@@ -39,16 +43,16 @@ def login():
             session["logged_in"] = True
             return redirect(url_for("index"))
         else:
-            return "Falsche Zugangsdaten."
+            return "❌ Falsche Zugangsdaten."
     return render_template("login.html")
 
 def download_audio(url):
     output_template = "/tmp/downloads/%(title)s.%(ext)s"
-
     os.makedirs("/tmp/downloads", exist_ok=True)
 
     ydl_opts = {
         'format': 'bestaudio',
+        'ffmpeg_location': ffmpeg_path,  # <- sehr wichtig!
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
@@ -64,7 +68,7 @@ def download_audio(url):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info).replace(".webm", ".m4a")  # ggf. anpassen
+        filename = ydl.prepare_filename(info).replace(".webm", ".m4a")  # je nach Plattform ggf. anpassen
         return filename
 
 def upload_to_webdav(local_path):
