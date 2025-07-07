@@ -21,13 +21,12 @@ FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
 
 try:
-    # static_ffmpeg.add_paths() returns the directory where it placed binaries
-   add_paths()  # Nur zum PATH hinzufügen, gibt keinen Pfad zurück
+ ffmpeg_bin_dir = add_paths() 
 
-# Manuell Pfad setzen (standardmäßig entpackt in dieses Verzeichnis)
-ffmpeg_bin_dir = os.path.join(os.path.dirname(__file__), "venv/lib/python3.12/site-packages/static_ffmpeg/bin")
-FFMPEG_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, "ffmpeg")
-FFPROBE_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, "ffprobe")
+# Construct the full, absolute path to the ffmpeg and ffprobe executables
+# This is the crucial change for yt-dlp's ffmpeg_location
+FFMPEG_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
+FFPROBE_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffprobe')
 
 
     # Verify if the files exist and are executable (optional, but good for debugging startup)
