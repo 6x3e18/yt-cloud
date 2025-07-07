@@ -96,80 +96,54 @@ def logout():
     session.pop("logged_in", None)
     flash("Du wurdest ausgeloggt.", "info")
     return redirect(url_for("login"))
-
 def download_audio(url):
     download_dir = "/tmp/downloads"
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Starte Audio-Download für URL: {url}")
-logging.info(f"Using FFmpeg path for yt-dlp: {ffmpeg_path}")
+    logging.info(f"Using FFmpeg path for yt-dlp: {ffmpeg_path}")
+
     # yt-dlp wird das Format basierend auf 'preferredcodec' festlegen
     # Die Dateierweiterung wird automatisch korrekt sein (z.B. .m4a)
     ydl_opts = {
-        'format': 'bestaudio/best', # Versuch 'bestaudio', fallback auf 'best'
+        'format': 'bestaudio/best',  # Versuch 'bestaudio', fallback auf 'best'
         'ffmpeg_location': ffmpeg_path,
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'aac',
-                'preferredquality': '0', # Beste Qualität
+                'preferredquality': '0',  # Beste Qualität
             },
             {'key': 'EmbedThumbnail'},
             {'key': 'FFmpegMetadata'}
         ],
         'outtmpl': os.path.join(download_dir, '%(title)s.%(ext)s'),
         'writethumbnail': True,
-        'quiet': False, # Setze auf True für weniger Konsolenausgabe von yt-dlp
-        'no_warnings': False, # Setze auf True für weniger Warnungen
-        'verbose': False # Setze auf True für detaillierte yt-dlp Logs (gut zum Debuggen)
+        'quiet': False,  # Setze auf True für weniger Konsolenausgabe von yt-dlp
+        'no_warnings': False,  # Setze auf True für weniger Warnungen
+        'verbose': False  # Setze auf True für detaillierte yt-dlp Logs (gut zum Debuggen)
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        # yt-dlp sollte hier bereits den finalen Dateinamen mit der korrekten Erweiterung zurückgeben
-        # Nach der Post-Processing-Konvertierung ist die Erweiterung korrekt (z.B. .m4a)
         final_filename = ydl.prepare_filename(info)
-        
-        # Wichtig: yt-dlp gibt den Dateinamen VOR der Konvertierung zurück.
-        # Um den tatsächlichen Pfad nach der Konvertierung zu erhalten, müssen wir das ändern.
-        # Der Postprocessor FFmpegExtractAudio konvertiert zu .aac, was typischerweise .m4a ist.
-        # Wir müssen den Dateinamen basierend auf dem info-Dictionary und der 'post_process' Information anpassen.
-        # Eine einfachere und robustere Methode ist, den Dateinamen zu rekonstruieren,
-        # da yt-dlp die Extension oft ändert.
-        # Wenn der Postprocessor erfolgreich war, ist die Endung i.d.R. .m4a
-        # Man könnte auch über die 'requested_downloads' oder ähnliches iterieren,
-        # aber das wird schnell komplex. Für diesen Fall ist es oft ausreichend,
-        # die erwartete Endung anzunehmen, oder den ursprünglichen Dateinamen zu holen
-        # und dann die Endung zu ändern, falls sie nicht .m4a ist.
-        
-        # Robustere Methode: Hole den Pfad aus den 'files' des 'info'-Objekts, wenn verfügbar
-        # oder baue ihn neu mit der erwarteten Erweiterung auf.
-        
-        # Prüfe, ob die 'files'-Liste im info-Objekt vorhanden ist (manchmal nach PP)
+
         if 'files' in info and info['files']:
-            # Nimm die erste Datei als die umgewandelte
             converted_file = info['files'][0]
             if 'filepath' in converted_file:
                 actual_filename = converted_file['filepath']
                 logging.info(f"Konvertierter Dateipfad aus info['files']: {actual_filename}")
                 return actual_filename
-        
-        # Fallback: Wenn 'files' nicht so detailliert ist, versuchen wir, die erwartete Endung zu finden.
-        # yt-dlp gibt oft den ursprünglichen Dateinamen zurück und ändert ihn erst nach PP auf Disk.
-        # Die Postprozessoren ändern die Dateiendung. `FFmpegExtractAudio` zu `aac` führt fast immer zu `.m4a`.
-        # Wir können versuchen, die Endung von `final_filename` (die vor der PP-Änderung) zu korrigieren.
+
         base_filename_without_ext = os.path.splitext(final_filename)[0]
         expected_filename = f"{base_filename_without_ext}.m4a"
-        
-        # Überprüfe, ob die erwartete Datei existiert
+
         if os.path.exists(expected_filename):
             logging.info(f"Erwarteter Dateipfad {expected_filename} existiert.")
             return expected_filename
         else:
-            # Dies ist ein Fallback, wenn die Dateinamenserkennung schwierig ist.
-            # Im Fehlerfall wird das `os.path.exists` nicht greifen.
-            # Für Debugging: logging.warning(f"Datei {expected_filename} nicht gefunden. Rückgabe von {final_filename}")
-            logging.warning(f"Konnte den konvertierten Dateipfad nicht eindeutig bestimmen. Verwende den von yt-dlp bereitgestellten initialen Pfad: {final_filename}")
-            return final_filename # Dies könnte der .webm-Pfad sein, wenn Konvertierung fehlschlägt
+            logging.warning(f"Konnte den konvertierten Dateipfad nicht eindeutig bestimmen. Verwende den initialen Pfad: {final_filename}")
+            return final_filename
+
 
 def upload_to_webdav(local_path):
     if not all([WEBDAV_HOST, WEBDAV_LOGIN, WEBDAV_PASSWORD]):
