@@ -1,4 +1,5 @@
-Flask==3.0.3
+Flask
 yt-dlp
-webdavclient3
 python-dotenv
+requests
+easywebdav3
