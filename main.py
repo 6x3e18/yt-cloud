@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from webdav3.client import Client
-from static_ffmpeg import add_paths, get_ffmpeg_path
+from static_ffmpeg import add_paths
 import yt_dlp
 from dotenv import load_dotenv
 
@@ -15,15 +15,13 @@ load_dotenv()
 # Initialisiere ffmpeg/ffprobe
 try:
     add_paths()
-    ffmpeg_path = get_ffmpeg_path()
+    ffmpeg_path = shutil.which("ffmpeg")  # Statt get_ffmpeg_path()
     if not ffmpeg_path:
-        raise RuntimeError("FFmpeg Pfad konnte nicht gefunden werden. Bitte stelle sicher, dass static_ffmpeg richtig initialisiert wurde.")
+        raise RuntimeError("FFmpeg konnte nicht gefunden werden.")
     logging.info(f"FFmpeg Pfad erfolgreich gefunden: {ffmpeg_path}")
 except Exception as e:
     logging.error(f"Fehler bei der Initialisierung von FFmpeg: {e}")
-    # Hier könnte man das Programm beenden oder eine Fehlermeldung anzeigen
-    # Für eine Webanwendung ist es besser, dies dem Nutzer mitzuteilen
-    ffmpeg_path = None # Setze auf None, um spätere Fehler zu provozieren
+    ffmpeg_path = None
 
 # Flask Setup
 app = Flask(__name__)
