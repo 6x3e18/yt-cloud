@@ -1,8 +1,12 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from webdav3.client import Client
+from static_ffmpeg import add_paths
+add_paths()  # stellt ffmpeg & ffprobe zur Verfügung
 import yt_dlp
 from dotenv import load_dotenv
+
+
 
 load_dotenv()
 
