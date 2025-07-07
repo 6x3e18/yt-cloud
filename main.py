@@ -13,18 +13,29 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Lade .env Variablen
 load_dotenv()
 
-# Initialisiere ffmpeg/ffprobe
+# Initialisiere ffmpeg/ffprobe über static_ffmpeg
 try:
+    from static_ffmpeg import add_paths
     add_paths()
+
+    # Stelle sicher, dass ffmpeg gefunden wird
     ffmpeg_bin = shutil.which("ffmpeg")
-    if not ffmpeg_bin:
-        raise RuntimeError("FFmpeg konnte nicht gefunden werden.")
-    ffmpeg_path = os.path.dirname(ffmpeg_bin)  # yt-dlp braucht den Ordner!
-    logging.info(f"FFmpeg Pfad erfolgreich gefunden: {ffmpeg_bin}")
-    logging.info(f"Verwendeter ffmpeg_location für yt-dlp: {ffmpeg_path}")
+    ffprobe_bin = shutil.which("ffprobe")
+
+    if not ffmpeg_bin or not ffprobe_bin:
+        raise RuntimeError(f"FFmpeg oder ffprobe wurde nicht gefunden. ffmpeg: {ffmpeg_bin}, ffprobe: {ffprobe_bin}")
+
+    # yt-dlp erwartet den Ordner (nicht die Datei selbst)
+    ffmpeg_path = os.path.dirname(ffmpeg_bin)
+
+    logging.info(f"FFmpeg Pfad gefunden: {ffmpeg_bin}")
+    logging.info(f"FFprobe Pfad gefunden: {ffprobe_bin}")
+    logging.info(f"ffmpeg_location für yt-dlp: {ffmpeg_path}")
+
 except Exception as e:
-    logging.error(f"Fehler bei der Initialisierung von FFmpeg: {e}")
+    logging.error(f"Fehler bei der Initialisierung von FFmpeg/FFprobe: {e}")
     ffmpeg_path = None
+
 
 
 # Flask Setup
