@@ -22,20 +22,24 @@ FFPROBE_EXECUTABLE_PATH = None
 
 try:
     # static_ffmpeg.add_paths() returns the directory where it placed binaries
-    ffmpeg_bin_dir = add_paths() 
+    ffmpeg_bin_dir = add_paths()
 
     # Construct the full, absolute path to the ffmpeg and ffprobe executables
     # This is the crucial change for yt-dlp's ffmpeg_location
-    FFMPEG_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
-    FFPROBE_EXECUTABLE_PATH = os.path.join(ffmpeg_bin_dir, 'ffprobe')
+    static_ffmpeg_path = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
+    static_ffprobe_path = os.path.join(ffmpeg_bin_dir, 'ffprobe')
 
-    # Verify if the files exist and are executable (optional, but good for debugging startup)
-    if os.path.exists(FFMPEG_EXECUTABLE_PATH) and os.path.isfile(FFMPEG_EXECUTABLE_PATH) and os.access(FFMPEG_EXECUTABLE_PATH, os.X_OK):
-        logging.info(f"FFmpeg ausführbarer Pfad erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
+    # Prioritize static_ffmpeg paths if they are valid
+    if os.path.exists(static_ffmpeg_path) and os.path.isfile(static_ffmpeg_path) and os.access(static_ffmpeg_path, os.X_OK):
+        FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
+        FFPROBE_EXECUTABLE_PATH = static_ffprobe_path
+        logging.info(f"FFmpeg ausführbarer Pfad (static_ffmpeg) erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
     else:
+        logging.warning("Static FFmpeg Pfad ist nicht gültig oder nicht ausführbar, versuche systemweiten FFmpeg.")
         # Fallback to system-wide ffmpeg if static_ffmpeg path isn't valid/executable
         ffmpeg_bin_sys = shutil.which("ffmpeg")
         ffprobe_bin_sys = shutil.which("ffprobe")
+
         if ffmpeg_bin_sys and ffprobe_bin_sys:
             FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
             FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
@@ -45,6 +49,7 @@ try:
 
 except Exception as e:
     logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}")
+    # Diese Zeilen sind wichtig, um sicherzustellen, dass die Pfade auf None gesetzt werden
     FFMPEG_EXECUTABLE_PATH = None
     FFPROBE_EXECUTABLE_PATH = None
 
