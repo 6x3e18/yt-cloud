@@ -8,6 +8,7 @@ import glob
 from static_ffmpeg import add_paths
 import yt_dlp
 from dotenv import load_dotenv
+import subprocess
 
 # Konfiguriere Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -280,3 +281,13 @@ if __name__ == "__main__":
     # Debug-Modus ist gut für die Entwicklung, aber NICHT für die Produktion
     # app.run(host="0.0.0.0", port=5000, debug=True) 
     app.run(host="0.0.0.0", port=5000)
+
+
+logging.info("Teste manuelles ffmpeg/ffprobe Kommando...")
+
+try:
+    subprocess.run([FFMPEG_EXECUTABLE_PATH, "-version"], check=True)
+    subprocess.run([FFMPEG_EXECUTABLE_PATH.replace("ffmpeg", "ffprobe"), "-version"], check=True)
+    logging.info("Beide Befehle ffmpeg und ffprobe funktionieren über subprocess.")
+except Exception as e:
+    logging.error(f"Fehler beim manuellen Test von ffmpeg/ffprobe: {e}")
