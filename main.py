@@ -182,6 +182,11 @@ def download_audio(url):
     # Logging der expliziten Pfade
     logging.info(f"FFmpeg/FFprobe sollten jetzt über PATH gefunden werden.")
 
+    ffmpeg_dir = os.path.dirname(FFMPEG_EXECUTABLE_PATH)
+
+    assert os.path.exists(os.path.join(ffmpeg_dir, 'ffmpeg')), "ffmpeg fehlt!"
+    assert os.path.exists(os.path.join(ffmpeg_dir, 'ffprobe')), "ffprobe fehlt!"
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [
@@ -198,7 +203,8 @@ def download_audio(url):
         'quiet': False,
         'no_warnings': False,
         'verbose': False,
-        'ffmpeg_location': FFMPEG_EXECUTABLE_PATH, 
+        'ffmpeg_location': os.path.dirname(FFMPEG_EXECUTABLE_PATH),
+
     }
 
     print(f"Verwende ffmpeg_location: {FFMPEG_EXECUTABLE_PATH}")
