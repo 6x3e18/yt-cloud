@@ -24,23 +24,42 @@ FFPROBE_EXECUTABLE_PATH = None
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
 
+# Initialisiere ffmpeg/ffprobe mit Fallback
+# Global variable to store the found ffmpeg executable path
+FFMPEG_EXECUTABLE_PATH = None
+FFPROBE_EXECUTABLE_PATH = None
+
 try:
     # static_ffmpeg.add_paths() returns the directory where it placed binaries
     ffmpeg_bin_dir = add_paths()
 
-    # Construct the full, absolute path to the ffmpeg and ffprobe executables
-    # This is the crucial change for yt-dlp's ffmpeg_location
-    static_ffmpeg_path = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
-    static_ffprobe_path = os.path.join(ffmpeg_bin_dir, 'ffprobe')
+    # --- WICHTIGE ÄNDERUNG HIER ---
+    # Überprüfe, ob ffmpeg_bin_dir ein gültiger Pfad (String) ist
+    if isinstance(ffmpeg_bin_dir, str) and os.path.isdir(ffmpeg_bin_dir):
+        # Construct the full, absolute path to the ffmpeg and ffprobe executables
+        static_ffmpeg_path = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
+        static_ffprobe_path = os.path.join(ffmpeg_bin_dir, 'ffprobe')
 
-    # Prioritize static_ffmpeg paths if they are valid
-    if os.path.exists(static_ffmpeg_path) and os.path.isfile(static_ffmpeg_path) and os.access(static_ffmpeg_path, os.X_OK):
-        FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
-        FFPROBE_EXECUTABLE_PATH = static_ffprobe_path
-        logging.info(f"FFmpeg ausführbarer Pfad (static_ffmpeg) erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
+        # Prioritize static_ffmpeg paths if they are valid
+        if os.path.exists(static_ffmpeg_path) and os.path.isfile(static_ffmpeg_path) and os.access(static_ffmpeg_path, os.X_OK):
+            FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
+            FFPROBE_EXECUTABLE_PATH = static_ffprobe_path
+            logging.info(f"FFmpeg ausführbarer Pfad (static_ffmpeg) erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
+        else:
+            logging.warning(f"Static FFmpeg Pfad ({static_ffmpeg_path}) ist nicht gültig oder nicht ausführbar, versuche systemweiten FFmpeg.")
+            # Fallback zu systemweitem ffmpeg
+            ffmpeg_bin_sys = shutil.which("ffmpeg")
+            ffprobe_bin_sys = shutil.which("ffprobe")
+
+            if ffmpeg_bin_sys and ffprobe_bin_sys:
+                FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
+                FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
+                logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
+            else:
+                raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
     else:
-        logging.warning("Static FFmpeg Pfad ist nicht gültig oder nicht ausführbar, versuche systemweiten FFmpeg.")
-        # Fallback to system-wide ffmpeg if static_ffmpeg path isn't valid/executable
+        logging.warning(f"static_ffmpeg.add_paths() gab keinen gültigen Pfad zurück ({ffmpeg_bin_dir}). Versuche systemweiten FFmpeg.")
+        # Fallback zu systemweitem ffmpeg, da static_ffmpeg versagt hat
         ffmpeg_bin_sys = shutil.which("ffmpeg")
         ffprobe_bin_sys = shutil.which("ffprobe")
 
@@ -49,12 +68,11 @@ try:
             FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
             logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
         else:
-            # Wirf eine Runtime-Fehler, wenn weder static_ffmpeg noch systemweit gefunden wurde
             raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
 except Exception as e:
     # Hier protokollieren wir den genauen Fehler, der das Problem verursacht hat
-    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}", exc_info=True) # <<< WICHTIG: exc_info=True hinzufügen
+    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}", exc_info=True)
     FFMPEG_EXECUTABLE_PATH = None
     FFPROBE_EXECUTABLE_PATH = None
 
