@@ -160,59 +160,61 @@ def download_audio(url):
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Starte Audio-Download für URL: {url}")
 
-    # Füge diese Überprüfung HINZU!
-    if FFMPEG_EXECUTABLE_PATH is None:
-        logging.error("FFMPEG_EXECUTABLE_PATH ist None, was zu Fehlern führen kann!")
-    elif not isinstance(FFMPEG_EXECUTABLE_PATH, (str, bytes, os.PathLike)):
-        logging.error(f"FFMPEG_EXECUTABLE_PATH ist vom Typ {type(FFMPEG_EXECUTABLE_PATH)}, erwartet wird str, bytes oder os.PathLike!")
-    else:
-        logging.info(f"Using FFmpeg executable path for yt-dlp: {FFMPEG_EXECUTABLE_PATH}")
+    # Stelle sicher, dass FFMPEG_EXECUTABLE_PATH gesetzt ist, bevor wir fortfahren
+    if not FFMPEG_EXECUTABLE_PATH:
+        raise RuntimeError("FFmpeg ist nicht verfügbar, kann keinen Download durchführen.")
 
-    # yt-dlp wird das Format basierend auf 'preferredcodec' festlegen
-    # Die Dateierweiterung wird automatisch korrekt sein (z.B. .m4a)
+    # Der Pfad, den wir an yt-dlp übergeben, sollte das VERZEICHNIS sein,
+    # in dem ffmpeg und ffprobe liegen, nicht die ausführbare Datei selbst.
+    # Wir nehmen an, dass FFMPEG_EXECUTABLE_PATH bereits der volle Pfad zur ffmpeg-Binary ist.
+    # Also extrahieren wir das Verzeichnis davon.
+    ffmpeg_bin_directory = os.path.dirname(FFMPEG_EXECUTABLE_PATH)
+    logging.info(f"Using FFmpeg binary directory for yt-dlp: {ffmpeg_bin_directory}")
+
     ydl_opts = {
-        'format': 'bestaudio/best',  # Versuch 'bestaudio', fallback auf 'best'
-        # Pass the full executable path, not just the directory
-        'ffmpeg_location': FFMPEG_EXECUTABLE_PATH, 
+        'format': 'bestaudio/best',
+        # Pass the full EXECUTABLE PATH, not just the directory for --ffmpeg-location.
+        # However, yt-dlp expects the DIRECTORY in older versions or might behave differently.
+        # Let's try passing the directory. If that doesn't work, we'll try the full path again
+        # but ensure ffprobe_location is explicitly set too if needed.
+
+        # *** WICHTIGE ÄNDERUNG HIER ***
+        # Verwende den Verzeichnis-Pfad anstatt des direkten Executable-Pfads
+        'ffmpeg_location': ffmpeg_bin_directory, # <--- DIES IST DIE ENTSCHEIDENDE ÄNDERUNG
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'aac',
-                'preferredquality': '0',  # Beste Qualität
+                'preferredquality': '0',
             },
             {'key': 'EmbedThumbnail'},
             {'key': 'FFmpegMetadata'}
         ],
         'outtmpl': os.path.join(download_dir, '%(title)s.%(ext)s'),
         'writethumbnail': True,
-        'quiet': False,  # Setze auf True für weniger Konsolenausgabe von yt-dlp
-        'no_warnings': False,  # Setze auf True für weniger Warnungen
-        'verbose': False  # Setze auf True für detaillierte yt-dlp Logs (gut zum Debuggen)
+        'quiet': False,
+        'no_warnings': False,
+        'verbose': False
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         final_filename = ydl.prepare_filename(info)
 
-        # Better way to get the actual output file after post-processing
-        # yt-dlp stores the actual output files under 'requested_downloads' or directly in 'info'
+        # ... (restliche Logik zum Auffinden des Dateinamens bleibt gleich) ...
         if 'requested_downloads' in info and info['requested_downloads']:
             actual_filename_list = [d['filepath'] for d in info['requested_downloads'] if 'filepath' in d]
             if actual_filename_list:
                 actual_filename = actual_filename_list[0]
                 logging.info(f"Konvertierter Dateipfad aus info['requested_downloads']: {actual_filename}")
                 return actual_filename
-        
-        # Fallback for other scenarios or if 'requested_downloads' is not present/empty
-        elif 'filepath' in info: # Some versions or types might put it directly here
-             actual_filename = info['filepath']
-             logging.info(f"Konvertierter Dateipfad aus info['filepath']: {actual_filename}")
-             return actual_filename
+        elif 'filepath' in info:
+            actual_filename = info['filepath']
+            logging.info(f"Konvertierter Dateipfad aus info['filepath']: {actual_filename}")
+            return actual_filename
 
-
-        # Original fallback logic, might still be needed for edge cases
         base_filename_without_ext = os.path.splitext(final_filename)[0]
-        expected_filename = f"{base_filename_without_ext}.m4a" # Assuming AAC leads to .m4a
+        expected_filename = f"{base_filename_without_ext}.m4a"
 
         if os.path.exists(expected_filename):
             logging.info(f"Erwarteter Dateipfad {expected_filename} existiert.")
@@ -220,7 +222,6 @@ def download_audio(url):
         else:
             logging.warning(f"Konnte den konvertierten Dateipfad nicht eindeutig bestimmen. Verwende den initialen Pfad: {final_filename}")
             return final_filename
-
 
 def upload_to_webdav(local_path):
     if not all([WEBDAV_HOST, WEBDAV_LOGIN, WEBDAV_PASSWORD]):
