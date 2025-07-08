@@ -53,6 +53,11 @@ except Exception as e:
     FFMPEG_EXECUTABLE_PATH = None
     FFPROBE_EXECUTABLE_PATH = None
 
+# Nach dem try...except Block der FFmpeg Initialisierung
+if FFMPEG_EXECUTABLE_PATH is None:
+    logging.critical("CRITICAL: FFmpeg/FFprobe konnte NICHT initialisiert werden! FFMPEG_EXECUTABLE_PATH ist immer noch None.")
+else:
+    logging.info(f"FFmpeg Initialisierung abgeschlossen. FFMPEG_EXECUTABLE_PATH: {FFMPEG_EXECUTABLE_PATH}")
 
 # Flask Setup
 app = Flask(__name__)
@@ -131,8 +136,14 @@ def download_audio(url):
     download_dir = "/tmp/downloads"
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Starte Audio-Download für URL: {url}")
-    # Use the global FFMPEG_EXECUTABLE_PATH here
-    logging.info(f"Using FFmpeg executable path for yt-dlp: {FFMPEG_EXECUTABLE_PATH}") 
+
+    # Füge diese Überprüfung HINZU!
+    if FFMPEG_EXECUTABLE_PATH is None:
+        logging.error("FFMPEG_EXECUTABLE_PATH ist None, was zu Fehlern führen kann!")
+    elif not isinstance(FFMPEG_EXECUTABLE_PATH, (str, bytes, os.PathLike)):
+        logging.error(f"FFMPEG_EXECUTABLE_PATH ist vom Typ {type(FFMPEG_EXECUTABLE_PATH)}, erwartet wird str, bytes oder os.PathLike!")
+    else:
+        logging.info(f"Using FFmpeg executable path for yt-dlp: {FFMPEG_EXECUTABLE_PATH}")
 
     # yt-dlp wird das Format basierend auf 'preferredcodec' festlegen
     # Die Dateierweiterung wird automatisch korrekt sein (z.B. .m4a)
