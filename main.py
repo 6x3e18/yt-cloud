@@ -19,6 +19,10 @@ load_dotenv()
 # Global variable to store the found ffmpeg executable path
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
+# Initialisiere ffmpeg/ffprobe mit Fallback
+# Global variable to store the found ffmpeg executable path
+FFMPEG_EXECUTABLE_PATH = None
+FFPROBE_EXECUTABLE_PATH = None
 
 try:
     # static_ffmpeg.add_paths() returns the directory where it placed binaries
@@ -45,11 +49,12 @@ try:
             FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
             logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
         else:
+            # Wirf eine Runtime-Fehler, wenn weder static_ffmpeg noch systemweit gefunden wurde
             raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
 except Exception as e:
-    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}")
-    # Diese Zeilen sind wichtig, um sicherzustellen, dass die Pfade auf None gesetzt werden
+    # Hier protokollieren wir den genauen Fehler, der das Problem verursacht hat
+    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}", exc_info=True) # <<< WICHTIG: exc_info=True hinzufügen
     FFMPEG_EXECUTABLE_PATH = None
     FFPROBE_EXECUTABLE_PATH = None
 
