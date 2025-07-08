@@ -19,22 +19,13 @@ load_dotenv()
 # Global variable to store the found ffmpeg executable path
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
-# Initialisiere ffmpeg/ffprobe mit Fallback
-# Global variable to store the found ffmpeg executable path
-FFMPEG_EXECUTABLE_PATH = None
-FFPROBE_EXECUTABLE_PATH = None
-
-# Initialisiere ffmpeg/ffprobe mit Fallback
-# Global variable to store the found ffmpeg executable path
-FFMPEG_EXECUTABLE_PATH = None
-FFPROBE_EXECUTABLE_PATH = None
 
 try:
     # static_ffmpeg.add_paths() returns the directory where it placed binaries
     ffmpeg_bin_dir = add_paths()
 
     # --- WICHTIGE ÄNDERUNG HIER ---
-    # Überprüfe, ob ffmpeg_bin_dir ein gültiger Pfad (String) ist
+    # Überprüfe, ob ffmpeg_bin_dir ein gültiger Pfad (String) ist und ein Verzeichnis ist
     if isinstance(ffmpeg_bin_dir, str) and os.path.isdir(ffmpeg_bin_dir):
         # Construct the full, absolute path to the ffmpeg and ffprobe executables
         static_ffmpeg_path = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
@@ -45,6 +36,14 @@ try:
             FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
             FFPROBE_EXECUTABLE_PATH = static_ffprobe_path
             logging.info(f"FFmpeg ausführbarer Pfad (static_ffmpeg) erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
+
+            # --- NEU HINZUGEFÜGT ---
+            # Füge das Verzeichnis mit den FFmpeg/FFprobe Binaries zum PATH hinzu
+            # Dies ist entscheidend, damit yt-dlp sie ohne explizite Pfade findet
+            if ffmpeg_bin_dir not in os.environ['PATH']:
+                os.environ['PATH'] += os.pathsep + ffmpeg_bin_dir
+                logging.info(f"FFmpeg binary directory '{ffmpeg_bin_dir}' zum PATH hinzugefügt.")
+
         else:
             logging.warning(f"Static FFmpeg Pfad ({static_ffmpeg_path}) ist nicht gültig oder nicht ausführbar, versuche systemweiten FFmpeg.")
             # Fallback zu systemweitem ffmpeg
@@ -55,6 +54,13 @@ try:
                 FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
                 FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
                 logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
+
+                # --- NEU HINZUGEFÜGT ---
+                # Füge das Verzeichnis mit den systemweiten FFmpeg/FFprobe Binaries zum PATH hinzu
+                ffmpeg_sys_dir = os.path.dirname(ffmpeg_bin_sys)
+                if ffmpeg_sys_dir not in os.environ['PATH']:
+                    os.environ['PATH'] += os.pathsep + ffmpeg_sys_dir
+                    logging.info(f"Systemweiter FFmpeg binary directory '{ffmpeg_sys_dir}' zum PATH hinzugefügt.")
             else:
                 raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
     else:
@@ -67,16 +73,21 @@ try:
             FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
             FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
             logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
+
+            # --- NEU HINZUGEFÜGT ---
+            # Füge das Verzeichnis mit den systemweiten FFmpeg/FFprobe Binaries zum PATH hinzu
+            ffmpeg_sys_dir = os.path.dirname(ffmpeg_bin_sys)
+            if ffmpeg_sys_dir not in os.environ['PATH']:
+                os.environ['PATH'] += os.pathsep + ffmpeg_sys_dir
+                logging.info(f"Systemweiter FFmpeg binary directory '{ffmpeg_sys_dir}' zum PATH hinzugefügt.")
         else:
             raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
 except Exception as e:
-    # Hier protokollieren wir den genauen Fehler, der das Problem verursacht hat
     logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}", exc_info=True)
     FFMPEG_EXECUTABLE_PATH = None
     FFPROBE_EXECUTABLE_PATH = None
 
-# Nach dem try...except Block der FFmpeg Initialisierung
 if FFMPEG_EXECUTABLE_PATH is None:
     logging.critical("CRITICAL: FFmpeg/FFprobe konnte NICHT initialisiert werden! FFMPEG_EXECUTABLE_PATH ist immer noch None.")
 else:
