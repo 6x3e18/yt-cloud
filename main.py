@@ -198,8 +198,12 @@ def download_audio(url):
         'quiet': False,
         'no_warnings': False,
         'verbose': False,
+        'ffmpeg_location': FFMPEG_EXECUTABLE_PATH, 
     }
 
+    print(f"Verwende ffmpeg_location: {FFMPEG_EXECUTABLE_PATH}")
+
+    
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         final_filename = ydl.prepare_filename(info)
