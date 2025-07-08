@@ -2,6 +2,7 @@ import os
 import logging
 import shutil
 
+
 ffmpeg_dir = "/opt/venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/"
 os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
 
@@ -11,6 +12,7 @@ import sys
 import glob
 from static_ffmpeg import add_paths
 import yt_dlp
+FFMPEG_PATH = ffmpeg_dir
 from dotenv import load_dotenv
 import subprocess
 
@@ -195,6 +197,7 @@ def download_audio(url):
     logging.info(f"FFmpeg/FFprobe sollten jetzt über PATH gefunden werden.")
 
     ydl_opts = {
+        'ffmpeg_location': FFMPEG_PATH,
         'format': 'bestaudio/best',
         'postprocessors': [
             {
@@ -213,6 +216,7 @@ def download_audio(url):
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
         info = ydl.extract_info(url, download=True)
         final_filename = ydl.prepare_filename(info)
 
