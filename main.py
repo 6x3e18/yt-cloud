@@ -8,6 +8,7 @@ import glob
 from static_ffmpeg import add_paths
 import yt_dlp
 from dotenv import load_dotenv
+import subprocess
 
 # Konfiguriere Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,6 +20,13 @@ load_dotenv()
 # Globale Variablen zum Speichern der gefundenen ffmpeg/ffprobe ausführbaren Pfade
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
+
+try:
+    ffmpeg_version = subprocess.check_output([FFMPEG_EXECUTABLE_PATH, "-version"], text=True)
+    logging.info(f"FFmpeg Version:\n{ffmpeg_version}")
+except Exception as e:
+    logging.error(f"FFmpeg nicht ausführbar: {e}")
+
 
 try:
     # static_ffmpeg.add_paths() gibt das Verzeichnis zurück, in dem es die Binärdateien platziert hat
