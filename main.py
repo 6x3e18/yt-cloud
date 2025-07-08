@@ -5,7 +5,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from webdav3.client import Client
 import sys
 import glob
-from static_ffmpeg import add_paths
+# from static_ffmpeg import add_paths # Diese Zeile wird entfernt, da wir static_ffmpeg nicht mehr verwenden
 import yt_dlp
 from dotenv import load_dotenv
 
@@ -15,87 +15,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Lade .env Variablen
 load_dotenv()
 
-# Initialisiere ffmpeg/ffprobe mit Fallback
-# Globale Variablen zum Speichern der gefundenen ffmpeg/ffprobe ausführbaren Pfade
-FFMPEG_EXECUTABLE_PATH = None
-FFPROBE_EXECUTABLE_PATH = None
+# Initialisiere ffmpeg/ffprobe
+# Wir verlassen uns darauf, dass ffmpeg/ffprobe systemweit installiert und im PATH sind.
+# Daher benötigen wir keine spezielle Initialisierungslogik mehr für static_ffmpeg.
+FFMPEG_EXECUTABLE_PATH = shutil.which("ffmpeg")
+FFPROBE_EXECUTABLE_PATH = shutil.which("ffprobe")
 
-try:
-    # static_ffmpeg.add_paths() gibt das Verzeichnis zurück, in dem es die Binärdateien platziert hat
-    ffmpeg_bin_dir = add_paths()
-
-    # Überprüfe, ob ffmpeg_bin_dir ein gültiger Pfad (String) ist und ein Verzeichnis ist
-    if isinstance(ffmpeg_bin_dir, str) and os.path.isdir(ffmpeg_bin_dir):
-        # Konstruiere den vollständigen, absoluten Pfad zu den ffmpeg und ffprobe ausführbaren Dateien
-        static_ffmpeg_path = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
-        static_ffprobe_path = os.path.join(ffmpeg_bin_dir, 'ffprobe')
-
-        # Priorisiere static_ffmpeg Pfade, wenn sie gültig sind
-        if os.path.exists(static_ffmpeg_path) and os.path.isfile(static_ffmpeg_path) and os.access(static_ffmpeg_path, os.X_OK):
-            FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
-            FFPROBE_EXECUTABLE_PATH = static_ffprobe_path
-            logging.info(f"FFmpeg ausführbarer Pfad (static_ffmpeg) erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
-        else:
-            logging.warning(f"Static FFmpeg Pfad ({static_ffmpeg_path}) ist nicht gültig oder nicht ausführbar. Versuche systemweiten FFmpeg.")
-            # Fallback zu systemweitem ffmpeg
-            ffmpeg_bin_sys = shutil.which("ffmpeg")
-            ffprobe_bin_sys = shutil.which("ffprobe")
-
-            if ffmpeg_bin_sys and ffprobe_bin_sys:
-                FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
-                FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
-                logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
-            else:
-                raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
-    else:
-        logging.warning(f"static_ffmpeg.add_paths() gab keinen gültigen Pfad zurück ({ffmpeg_bin_dir}). Versuche systemweiten FFmpeg.")
-        # Fallback zu systemweitem ffmpeg, da static_ffmpeg versagt hat
-        ffmpeg_bin_sys = shutil.which("ffmpeg")
-        ffprobe_bin_sys = shutil.which("ffprobe")
-
-        if ffmpeg_bin_sys and ffprobe_bin_sys:
-            FFMPEG_EXECUTABLE_PATH = ffmpeg_bin_sys
-            FFPROBE_EXECUTABLE_PATH = ffprobe_bin_sys
-            logging.info(f"Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
-        else:
-            raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
-
-    # Sicherstellen der Ausführungsrechte für die gefundenen Binärdateien
-    if FFMPEG_EXECUTABLE_PATH and os.path.exists(FFMPEG_EXECUTABLE_PATH) and os.path.isfile(FFMPEG_EXECUTABLE_PATH):
-        try:
-            os.chmod(FFMPEG_EXECUTABLE_PATH, 0o755) # Lese-, Schreib-, Ausführungsrechte für Besitzer, Lese-/Ausführungsrechte für Gruppe/andere
-            logging.info(f"Ausführungsrechte für FFmpeg gesetzt: {FFMPEG_EXECUTABLE_PATH}")
-        except Exception as chmod_e:
-            logging.warning(f"Konnte Ausführungsrechte für FFmpeg nicht setzen: {chmod_e}")
-    if FFPROBE_EXECUTABLE_PATH and os.path.exists(FFPROBE_EXECUTABLE_PATH) and os.path.isfile(FFPROBE_EXECUTABLE_PATH):
-        try:
-            os.chmod(FFPROBE_EXECUTABLE_PATH, 0o755)
-            logging.info(f"Ausführungsrechte für FFprobe gesetzt: {FFPROBE_EXECUTABLE_PATH}")
-        except Exception as chmod_e:
-            logging.warning(f"Konnte Ausführungsrechte für FFprobe nicht setzen: {chmod_e}")
-
-    # PATH nur einmal und konsistent hinzufügen, wenn die Pfade erfolgreich gefunden wurden
-    if FFMPEG_EXECUTABLE_PATH:
-        # Extrahiere das Verzeichnis des gefundenen ffmpeg Pfades
-        found_ffmpeg_dir = os.path.dirname(FFMPEG_EXECUTABLE_PATH)
-        # Füge das Verzeichnis am ANFANG des PATH hinzu, um Priorität zu gewährleisten
-        if found_ffmpeg_dir not in os.environ['PATH'].split(os.pathsep): # Überprüfe, ob es nicht bereits im PATH ist
-            os.environ['PATH'] = found_ffmpeg_dir + os.pathsep + os.environ['PATH']
-            logging.info(f"FFmpeg/FFprobe binary directory '{found_ffmpeg_dir}' zum PATH hinzugefügt.")
-
-
-except Exception as e:
-    # Protokolliere den genauen Fehler, der das Problem verursacht hat
-    logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}", exc_info=True)
-    FFMPEG_EXECUTABLE_PATH = None
-    FFPROBE_EXECUTABLE_PATH = None
-
-# Nach dem try...except Block der FFmpeg Initialisierung
-if FFMPEG_EXECUTABLE_PATH is None:
-    logging.critical("CRITICAL: FFmpeg/FFprobe konnte NICHT initialisiert werden! FFMPEG_EXECUTABLE_PATH ist immer noch None.")
+if FFMPEG_EXECUTABLE_PATH is None or FFPROBE_EXECUTABLE_PATH is None:
+    logging.critical("CRITICAL: FFmpeg oder FFprobe wurde im System-PATH NICHT gefunden. Bitte stellen Sie sicher, dass FFmpeg installiert ist.")
+    # Optional: Hier könnten Sie die Anwendung beenden oder einen Fehler auf der Webseite anzeigen
 else:
-    logging.info(f"FFmpeg Initialisierung abgeschlossen. FFMPEG_EXECUTABLE_PATH: {FFMPEG_EXECUTABLE_PATH}")
-
+    logging.info(f"FFmpeg Initialisierung abgeschlossen. Verwende systemweiten FFmpeg: {FFMPEG_EXECUTABLE_PATH}")
+    logging.info(f"Verwende systemweiten FFprobe: {FFPROBE_EXECUTABLE_PATH}")
 
 # Flask Setup
 app = Flask(__name__)
@@ -179,7 +110,8 @@ def download_audio(url):
     if not FFMPEG_EXECUTABLE_PATH or not FFPROBE_EXECUTABLE_PATH:
         raise RuntimeError("FFmpeg oder FFprobe ist nicht verfügbar, kann keinen Download durchführen.")
 
-    # Logging der expliziten Pfade
+    # Da FFmpeg/FFprobe jetzt systemweit installiert sind, sollte yt-dlp sie automatisch finden.
+    # Wir entfernen die expliziten Pfadangaben aus den ydl_opts.
     logging.info(f"FFmpeg/FFprobe sollten jetzt über PATH gefunden werden.")
 
     ydl_opts = {
