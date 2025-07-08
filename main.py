@@ -180,13 +180,16 @@ def download_audio(url):
     if not FFMPEG_EXECUTABLE_PATH or not FFPROBE_EXECUTABLE_PATH:
         raise RuntimeError("FFmpeg oder FFprobe ist nicht verfügbar, kann keinen Download durchführen.")
 
-    # Logging der expliziten Pfade
-    logging.info(f"FFmpeg/FFprobe sollten jetzt über PATH gefunden werden.")
+    # Teste explizit, ob ffmpeg und ffprobe ausführbar sind
+    try:
+        subprocess.run([FFMPEG_EXECUTABLE_PATH, "-version"], check=True)
+        subprocess.run([FFPROBE_EXECUTABLE_PATH, "-version"], check=True)
+        logging.info("FFmpeg und FFprobe sind ausführbar.")
+    except Exception as e:
+        logging.error(f"Fehler beim Testen von ffmpeg/ffprobe: {e}")
+        raise RuntimeError("FFmpeg oder FFprobe kann nicht ausgeführt werden.")
 
     ffmpeg_dir = os.path.dirname(FFMPEG_EXECUTABLE_PATH)
-
-    assert os.path.exists(os.path.join(ffmpeg_dir, 'ffmpeg')), "ffmpeg fehlt!"
-    assert os.path.exists(os.path.join(ffmpeg_dir, 'ffprobe')), "ffprobe fehlt!"
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -203,36 +206,30 @@ def download_audio(url):
         'writethumbnail': True,
         'quiet': False,
         'no_warnings': False,
-        'verbose': False,
-        'ffmpeg_location': os.path.dirname(FFMPEG_EXECUTABLE_PATH),
-
+        'verbose': True,  # damit yt-dlp mehr Infos loggt
+        'ffmpeg_location': ffmpeg_dir,
     }
 
-    print(f"Verwende ffmpeg_location: {FFMPEG_EXECUTABLE_PATH}")
+    logging.info(f"Verwende ffmpeg_location: {ffmpeg_dir}")
 
-    
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         final_filename = ydl.prepare_filename(info)
 
-        # Besserer Weg, um die tatsächliche Ausgabedatei nach der Nachbearbeitung zu erhalten
         if 'requested_downloads' in info and info['requested_downloads']:
             actual_filename_list = [d['filepath'] for d in info['requested_downloads'] if 'filepath' in d]
             if actual_filename_list:
                 actual_filename = actual_filename_list[0]
                 logging.info(f"Konvertierter Dateipfad aus info['requested_downloads']: {actual_filename}")
                 return actual_filename
-            
-        # Fallback für andere Szenarien oder wenn 'requested_downloads' nicht vorhanden/leer ist
+
         elif 'filepath' in info:
             actual_filename = info['filepath']
             logging.info(f"Konvertierter Dateipfad aus info['filepath']: {actual_filename}")
             return actual_filename
 
-
-        # Ursprüngliche Fallback-Logik, könnte für Randfälle noch benötigt werden
         base_filename_without_ext = os.path.splitext(final_filename)[0]
-        expected_filename = f"{base_filename_without_ext}.m4a" # Angenommen, AAC führt zu .m4a
+        expected_filename = f"{base_filename_without_ext}.m4a"
 
         if os.path.exists(expected_filename):
             logging.info(f"Erwarteter Dateipfad {expected_filename} existiert.")
@@ -240,7 +237,6 @@ def download_audio(url):
         else:
             logging.warning(f"Konnte den konvertierten Dateipfad nicht eindeutig bestimmen. Verwende den initialen Pfad: {final_filename}")
             return final_filename
-
 
 def upload_to_webdav(local_path):
     if not all([WEBDAV_HOST, WEBDAV_LOGIN, WEBDAV_PASSWORD]):
@@ -281,13 +277,3 @@ if __name__ == "__main__":
     # Debug-Modus ist gut für die Entwicklung, aber NICHT für die Produktion
     # app.run(host="0.0.0.0", port=5000, debug=True) 
     app.run(host="0.0.0.0", port=5000)
-
-
-logging.info("Teste manuelles ffmpeg/ffprobe Kommando...")
-
-try:
-    subprocess.run([FFMPEG_EXECUTABLE_PATH, "-version"], check=True)
-    subprocess.run([FFMPEG_EXECUTABLE_PATH.replace("ffmpeg", "ffprobe"), "-version"], check=True)
-    logging.info("Beide Befehle ffmpeg und ffprobe funktionieren über subprocess.")
-except Exception as e:
-    logging.error(f"Fehler beim manuellen Test von ffmpeg/ffprobe: {e}")
