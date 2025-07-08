@@ -160,32 +160,31 @@ def download_audio(url):
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Starte Audio-Download für URL: {url}")
 
-    # Stelle sicher, dass FFMPEG_EXECUTABLE_PATH gesetzt ist, bevor wir fortfahren
-    if not FFMPEG_EXECUTABLE_PATH:
-        raise RuntimeError("FFmpeg ist nicht verfügbar, kann keinen Download durchführen.")
+    # Stelle sicher, dass FFMPEG_EXECUTABLE_PATH und FFPROBE_EXECUTABLE_PATH gesetzt sind
+    if not FFMPEG_EXECUTABLE_PATH or not FFPROBE_EXECUTABLE_PATH:
+        raise RuntimeError("FFmpeg oder FFprobe ist nicht verfügbar, kann keinen Download durchführen.")
 
-    # Der Pfad, den wir an yt-dlp übergeben, sollte das VERZEICHNIS sein,
-    # in dem ffmpeg und ffprobe liegen, nicht die ausführbare Datei selbst.
-    # Wir nehmen an, dass FFMPEG_EXECUTABLE_PATH bereits der volle Pfad zur ffmpeg-Binary ist.
-    # Also extrahieren wir das Verzeichnis davon.
-    ffmpeg_bin_directory = os.path.dirname(FFMPEG_EXECUTABLE_PATH)
-    logging.info(f"Using FFmpeg binary directory for yt-dlp: {ffmpeg_bin_directory}")
+    # Logging der expliziten Pfade
+    logging.info(f"Using FFmpeg executable path for yt-dlp: {FFMPEG_EXECUTABLE_PATH}")
+    logging.info(f"Using FFprobe executable path for yt-dlp: {FFPROBE_EXECUTABLE_PATH}")
+
 
     ydl_opts = {
         'format': 'bestaudio/best',
-        # Pass the full EXECUTABLE PATH, not just the directory for --ffmpeg-location.
-        # However, yt-dlp expects the DIRECTORY in older versions or might behave differently.
-        # Let's try passing the directory. If that doesn't work, we'll try the full path again
-        # but ensure ffprobe_location is explicitly set too if needed.
-
         # *** WICHTIGE ÄNDERUNG HIER ***
-        # Verwende den Verzeichnis-Pfad anstatt des direkten Executable-Pfads
-        'ffmpeg_location': ffmpeg_bin_directory, # <--- DIES IST DIE ENTSCHEIDENDE ÄNDERUNG
+        # Explizite Pfade für ffmpeg_location UND ffprobe_location angeben
+        'ffmpeg_location': FFMPEG_EXECUTABLE_PATH, # Pfad zur ffmpeg Binary
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'aac',
                 'preferredquality': '0',
+                # HINWEIS: Hier kann ein Problem auftreten.
+                # yt-dlp erwartet ffmpeg_location in den ydl_opts,
+                # nicht als expliziten Parameter für den Postprozessor.
+                # Wir stellen sicher, dass die globalen Optionen gesetzt sind.
+                # Wenn es immer noch nicht geht, könnte eine ältere yt-dlp Version
+                # oder eine spezielle Umgebung FFprobe_path als Option für yt-dlp benötigen.
             },
             {'key': 'EmbedThumbnail'},
             {'key': 'FFmpegMetadata'}
@@ -194,7 +193,13 @@ def download_audio(url):
         'writethumbnail': True,
         'quiet': False,
         'no_warnings': False,
-        'verbose': False
+        'verbose': False,
+        # *** NEU HINZUGEFÜGT ***
+        # Expliziter Pfad für ffprobe_location, falls yt-dlp ihn erwartet
+        'paths': {
+            'ffmpeg': FFMPEG_EXECUTABLE_PATH,
+            'ffprobe': FFPROBE_EXECUTABLE_PATH,
+        }
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
