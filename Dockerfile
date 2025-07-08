@@ -10,7 +10,40 @@ RUN apt-get update && \
         ffmpeg \
         curl \
         tar \
-        ca-certificates && \
+        ca-certificates \
+        # Hinzugefügte Bibliotheken, die oft von FFmpeg benötigt werden
+        libfontconfig1 \
+        libfreetype6 \
+        libx11-6 \
+        libxext6 \
+        libxrender1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxrender1 \
+        libxext6 \
+        libxrandr2 \
+        libxfixes3 \
+        libxi6 \
+        libxcursor1 \
+        libxdamage1 \
+        libxcomposite1 \
+        libnss3 \
+        libatk1.0-0 \
+        libcairo2 \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0 \
+        libgdk-pixbuf2.0-0 \
+        libxss1 \
+        libxtst6 \
+        # Optional: Weitere Codec-Bibliotheken, falls spezifische Codecs fehlen
+        # libavcodec-extra \
+        # libavformat-extra \
+        # libavutil-extra \
+        # libswresample-extra \
+        # libswscale-extra \
+        # libpostproc-extra \
+        # libavdevice-extra \
+        && \
     rm -rf /var/lib/apt/lists/*
 
 # Arbeitsverzeichnis setzen
