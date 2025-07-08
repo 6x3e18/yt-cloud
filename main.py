@@ -5,7 +5,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from webdav3.client import Client
 import sys
 import glob
-from static_ffmpeg import add_paths # Keep this import, but we'll use its return value directly
+from static_ffmpeg import add_paths
 import yt_dlp
 from dotenv import load_dotenv
 
@@ -16,37 +16,27 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 load_dotenv()
 
 # Initialisiere ffmpeg/ffprobe mit Fallback
-# Global variable to store the found ffmpeg executable path
-FFMPEG_EXECUTABLE_PATH = None
-FFPROBE_EXECUTABLE_PATH = None
-# Initialisiere ffmpeg/ffprobe mit Fallback
-# Global variable to store the found ffmpeg executable path
-FFMPEG_EXECUTABLE_PATH = None
-FFPROBE_EXECUTABLE_PATH = None
-
-# Initialisiere ffmpeg/ffprobe mit Fallback
-# Global variable to store the found ffmpeg executable path
+# Globale Variablen zum Speichern der gefundenen ffmpeg/ffprobe ausführbaren Pfade
 FFMPEG_EXECUTABLE_PATH = None
 FFPROBE_EXECUTABLE_PATH = None
 
 try:
-    # static_ffmpeg.add_paths() returns the directory where it placed binaries
+    # static_ffmpeg.add_paths() gibt das Verzeichnis zurück, in dem es die Binärdateien platziert hat
     ffmpeg_bin_dir = add_paths()
 
-    # --- WICHTIGE ÄNDERUNG HIER ---
-    # Überprüfe, ob ffmpeg_bin_dir ein gültiger Pfad (String) ist
+    # Überprüfe, ob ffmpeg_bin_dir ein gültiger Pfad (String) ist und ein Verzeichnis ist
     if isinstance(ffmpeg_bin_dir, str) and os.path.isdir(ffmpeg_bin_dir):
-        # Construct the full, absolute path to the ffmpeg and ffprobe executables
+        # Konstruiere den vollständigen, absoluten Pfad zu den ffmpeg und ffprobe ausführbaren Dateien
         static_ffmpeg_path = os.path.join(ffmpeg_bin_dir, 'ffmpeg')
         static_ffprobe_path = os.path.join(ffmpeg_bin_dir, 'ffprobe')
 
-        # Prioritize static_ffmpeg paths if they are valid
+        # Priorisiere static_ffmpeg Pfade, wenn sie gültig sind
         if os.path.exists(static_ffmpeg_path) and os.path.isfile(static_ffmpeg_path) and os.access(static_ffmpeg_path, os.X_OK):
             FFMPEG_EXECUTABLE_PATH = static_ffmpeg_path
             FFPROBE_EXECUTABLE_PATH = static_ffprobe_path
             logging.info(f"FFmpeg ausführbarer Pfad (static_ffmpeg) erfolgreich gefunden und ist ausführbar: {FFMPEG_EXECUTABLE_PATH}")
         else:
-            logging.warning(f"Static FFmpeg Pfad ({static_ffmpeg_path}) ist nicht gültig oder nicht ausführbar, versuche systemweiten FFmpeg.")
+            logging.warning(f"Static FFmpeg Pfad ({static_ffmpeg_path}) ist nicht gültig oder nicht ausführbar. Versuche systemweiten FFmpeg.")
             # Fallback zu systemweitem ffmpeg
             ffmpeg_bin_sys = shutil.which("ffmpeg")
             ffprobe_bin_sys = shutil.which("ffprobe")
@@ -70,8 +60,32 @@ try:
         else:
             raise RuntimeError("Kein ffmpeg/ffprobe gefunden (weder static_ffmpeg noch systemweit)")
 
+    # Sicherstellen der Ausführungsrechte für die gefundenen Binärdateien
+    if FFMPEG_EXECUTABLE_PATH and os.path.exists(FFMPEG_EXECUTABLE_PATH) and os.path.isfile(FFMPEG_EXECUTABLE_PATH):
+        try:
+            os.chmod(FFMPEG_EXECUTABLE_PATH, 0o755) # Lese-, Schreib-, Ausführungsrechte für Besitzer, Lese-/Ausführungsrechte für Gruppe/andere
+            logging.info(f"Ausführungsrechte für FFmpeg gesetzt: {FFMPEG_EXECUTABLE_PATH}")
+        except Exception as chmod_e:
+            logging.warning(f"Konnte Ausführungsrechte für FFmpeg nicht setzen: {chmod_e}")
+    if FFPROBE_EXECUTABLE_PATH and os.path.exists(FFPROBE_EXECUTABLE_PATH) and os.path.isfile(FFPROBE_EXECUTABLE_PATH):
+        try:
+            os.chmod(FFPROBE_EXECUTABLE_PATH, 0o755)
+            logging.info(f"Ausführungsrechte für FFprobe gesetzt: {FFPROBE_EXECUTABLE_PATH}")
+        except Exception as chmod_e:
+            logging.warning(f"Konnte Ausführungsrechte für FFprobe nicht setzen: {chmod_e}")
+
+    # PATH nur einmal und konsistent hinzufügen, wenn die Pfade erfolgreich gefunden wurden
+    if FFMPEG_EXECUTABLE_PATH:
+        # Extrahiere das Verzeichnis des gefundenen ffmpeg Pfades
+        found_ffmpeg_dir = os.path.dirname(FFMPEG_EXECUTABLE_PATH)
+        # Füge das Verzeichnis am ANFANG des PATH hinzu, um Priorität zu gewährleisten
+        if found_ffmpeg_dir not in os.environ['PATH'].split(os.pathsep): # Überprüfe, ob es nicht bereits im PATH ist
+            os.environ['PATH'] = found_ffmpeg_dir + os.pathsep + os.environ['PATH']
+            logging.info(f"FFmpeg/FFprobe binary directory '{found_ffmpeg_dir}' zum PATH hinzugefügt.")
+
+
 except Exception as e:
-    # Hier protokollieren wir den genauen Fehler, der das Problem verursacht hat
+    # Protokolliere den genauen Fehler, der das Problem verursacht hat
     logging.error(f"Fehler bei FFmpeg/FFprobe Initialisierung: {e}", exc_info=True)
     FFMPEG_EXECUTABLE_PATH = None
     FFPROBE_EXECUTABLE_PATH = None
@@ -81,6 +95,7 @@ if FFMPEG_EXECUTABLE_PATH is None:
     logging.critical("CRITICAL: FFmpeg/FFprobe konnte NICHT initialisiert werden! FFMPEG_EXECUTABLE_PATH ist immer noch None.")
 else:
     logging.info(f"FFmpeg Initialisierung abgeschlossen. FFMPEG_EXECUTABLE_PATH: {FFMPEG_EXECUTABLE_PATH}")
+
 
 # Flask Setup
 app = Flask(__name__)
@@ -109,7 +124,7 @@ def index():
             flash("Bitte gib eine URL ein.", "error")
             return render_template("index.html")
             
-        # Use the globally determined ffmpeg path
+        # Verwende den global ermittelten ffmpeg Pfad
         if not FFMPEG_EXECUTABLE_PATH: 
             flash("❌ Fehler: FFmpeg ist nicht verfügbar. Bitte kontaktiere den Administrator.", "error")
             return render_template("index.html")
@@ -165,26 +180,15 @@ def download_audio(url):
         raise RuntimeError("FFmpeg oder FFprobe ist nicht verfügbar, kann keinen Download durchführen.")
 
     # Logging der expliziten Pfade
-    logging.info(f"Using FFmpeg executable path for yt-dlp: {FFMPEG_EXECUTABLE_PATH}")
-    logging.info(f"Using FFprobe executable path for yt-dlp: {FFPROBE_EXECUTABLE_PATH}")
-
+    logging.info(f"FFmpeg/FFprobe sollten jetzt über PATH gefunden werden.")
 
     ydl_opts = {
         'format': 'bestaudio/best',
-        # *** WICHTIGE ÄNDERUNG HIER ***
-        # Explizite Pfade für ffmpeg_location UND ffprobe_location angeben
-        'ffmpeg_location': FFMPEG_EXECUTABLE_PATH, # Pfad zur ffmpeg Binary
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'aac',
                 'preferredquality': '0',
-                # HINWEIS: Hier kann ein Problem auftreten.
-                # yt-dlp erwartet ffmpeg_location in den ydl_opts,
-                # nicht als expliziten Parameter für den Postprozessor.
-                # Wir stellen sicher, dass die globalen Optionen gesetzt sind.
-                # Wenn es immer noch nicht geht, könnte eine ältere yt-dlp Version
-                # oder eine spezielle Umgebung FFprobe_path als Option für yt-dlp benötigen.
             },
             {'key': 'EmbedThumbnail'},
             {'key': 'FFmpegMetadata'}
@@ -194,32 +198,30 @@ def download_audio(url):
         'quiet': False,
         'no_warnings': False,
         'verbose': False,
-        # *** NEU HINZUGEFÜGT ***
-        # Expliziter Pfad für ffprobe_location, falls yt-dlp ihn erwartet
-        'paths': {
-            'ffmpeg': FFMPEG_EXECUTABLE_PATH,
-            'ffprobe': FFPROBE_EXECUTABLE_PATH,
-        }
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         final_filename = ydl.prepare_filename(info)
 
-        # ... (restliche Logik zum Auffinden des Dateinamens bleibt gleich) ...
+        # Besserer Weg, um die tatsächliche Ausgabedatei nach der Nachbearbeitung zu erhalten
         if 'requested_downloads' in info and info['requested_downloads']:
             actual_filename_list = [d['filepath'] for d in info['requested_downloads'] if 'filepath' in d]
             if actual_filename_list:
                 actual_filename = actual_filename_list[0]
                 logging.info(f"Konvertierter Dateipfad aus info['requested_downloads']: {actual_filename}")
                 return actual_filename
+            
+        # Fallback für andere Szenarien oder wenn 'requested_downloads' nicht vorhanden/leer ist
         elif 'filepath' in info:
             actual_filename = info['filepath']
             logging.info(f"Konvertierter Dateipfad aus info['filepath']: {actual_filename}")
             return actual_filename
 
+
+        # Ursprüngliche Fallback-Logik, könnte für Randfälle noch benötigt werden
         base_filename_without_ext = os.path.splitext(final_filename)[0]
-        expected_filename = f"{base_filename_without_ext}.m4a"
+        expected_filename = f"{base_filename_without_ext}.m4a" # Angenommen, AAC führt zu .m4a
 
         if os.path.exists(expected_filename):
             logging.info(f"Erwarteter Dateipfad {expected_filename} existiert.")
@@ -227,6 +229,7 @@ def download_audio(url):
         else:
             logging.warning(f"Konnte den konvertierten Dateipfad nicht eindeutig bestimmen. Verwende den initialen Pfad: {final_filename}")
             return final_filename
+
 
 def upload_to_webdav(local_path):
     if not all([WEBDAV_HOST, WEBDAV_LOGIN, WEBDAV_PASSWORD]):
@@ -237,7 +240,7 @@ def upload_to_webdav(local_path):
         'webdav_login': WEBDAV_LOGIN,
         'webdav_password': WEBDAV_PASSWORD,
         'disable_check_cert': True # Nur für Entwicklung/Testzwecke, NICHT in Produktion!
-                                   # Wenn dein WebDAV ein gültiges SSL-Zertifikat hat, entferne dies.
+                                    # Wenn dein WebDAV ein gültiges SSL-Zertifikat hat, entferne dies.
     }
 
     client = Client(options)
