@@ -1,6 +1,10 @@
 import os
 import logging
 import shutil
+
+ffmpeg_dir = "/opt/venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/"
+os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from webdav3.client import Client
 import sys
