@@ -3,4 +3,4 @@ yt-dlp
 python-dotenv
 requests
 webdavclient3
-
+static-ffmpeg
